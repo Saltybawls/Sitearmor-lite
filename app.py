@@ -15,22 +15,25 @@ WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyuQSbXqEFj4bCLxDzEnAFy47
 # Načtení dat z Google Tabulky
 @st.cache_data(ttl=5)
 def load_from_google():
+    default_df = pd.DataFrame([
+        {"Materiál": "Šrouby M10", "Ks v balení": 50, "Počet balení": 20, "Požadováno ks": 1500},
+        {"Materiál": "Flanched DN 150", "Ks v balení": 1, "Počet balení": 10, "Požadováno ks": 10}
+    ])
+    
     if WEB_APP_URL == "SEM_VLOZ_URL_Z_GOOGLE_SCRIPTS":
-        # Výchozí data s novými sloupci
-        return pd.DataFrame([
-            {"Materiál": "Šrouby M10", "Ks v balení": 50, "Počet balení": 20, "Požadováno ks": 1500},
-            {"Materiál": "Flanched DN 150", "Ks v balení": 1, "Počet balení": 10, "Požadováno ks": 10}
-        ])
+        return default_df
     try:
         response = requests.get(WEB_APP_URL)
         data = response.json()
         if data:
-            return pd.DataFrame(data)
-        else:
-            return pd.DataFrame(columns=["Materiál", "Ks v balení", "Počet balení", "Požadováno ks"])
+            df = pd.DataFrame(data)
+            # Kontrola, zda tabulka obsahuje správné sloupce, jinak vrátí výchozí
+            required_cols = ["Materiál", "Ks v balení", "Počet balení", "Požadováno ks"]
+            if all(col in df.columns for col in required_cols):
+                return df
+        return default_df
     except:
-        st.error("Nepodařilo se načíst data z Google Tabulky. Zkontroluj připojení.")
-        return pd.DataFrame(columns=["Materiál", "Ks v balení", "Počet balení", "Požadováno ks"])
+        return default_df
 
 # Inicializace dat
 if 'material_data' not in st.session_state:
@@ -47,10 +50,15 @@ edited_df = st.data_editor(
     key="data_editor"
 )
 
-# Automatické výpočty pro přehled pod tabulkou
+# Automatické výpočty pro přehled pod tabulką
 if not edited_df.empty:
     df_calc = edited_df.copy()
     
+    # Bezpečné ověření sloupców, pokud uživatel v tabulce něco smaže
+    for col in ["Ks v balení", "Počet balení", "Požadováno ks"]:
+        if col not in df_calc.columns:
+            df_calc[col] = 0
+
     # Ošetření číselných hodnot
     df_calc["Ks v balení"] = pd.to_numeric(df_calc["Ks v balení"], errors="coerce").fillna(0)
     df_calc["Počet balení"] = pd.to_numeric(df_calc["Počet balení"], errors="coerce").fillna(0)
@@ -61,7 +69,6 @@ if not edited_df.empty:
     df_calc["Chybí ks"] = df_calc["Požadováno ks"] - df_calc["Celkem ks"]
     df_calc["Chybí ks"] = df_calc["Chybí ks"].apply(lambda x: x if x > 0 else 0)
     
-    # Výpočet chybějících balení (ochrana před dělením nulou)
     def calc_missing_packs(row):
         if row["Ks v balení"] > 0 and row["Chybí ks"] > 0:
             return math.ceil(row["Chybí ks"] / row["Ks v balení"])
@@ -71,7 +78,6 @@ if not edited_df.empty:
 
     st.markdown("### 📊 Přehled stavu a chybějícího materiálu")
     
-    # Zobrazíme přehledovou tabulku včetně chybějících balení
     st.dataframe(
         df_calc[["Materiál", "Celkem ks", "Požadováno ks", "Chybí ks", "Chybí balení"]],
         use_container_width=True
