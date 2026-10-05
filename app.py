@@ -9,10 +9,10 @@ import math
 st.set_page_config(page_title="SiteArmor Lite", page_icon="🛡️")
 st.title("🛡️ SiteArmor Lite: Správa materiálu na stavbě")
 
-# SEM VLOŽ SVOJI URL ADRESU Z GOOGLE SCRIPTS:
-WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz8_GOd-U9n7f9Q-LIQbRINu4n9ioarj4-V3RI2sEKq7UAwoKyrDnN7Q8MIN8voq1aY/exec"
+# URL adresa tvého Google Scriptu:
+WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyuQSbXqEFj4bCLxDzEnAFy47yzvyvbOC7MBbuGx2V4d531ML0BI0aUoJw3vsoLus2v/exec"
 
-# Načtení dat z Google Tabulky
+# Načtení dat z Google Tabulky s bezpečným ošetřením prázdného stavu
 @st.cache_data(ttl=5)
 def load_from_google():
     default_df = pd.DataFrame([
@@ -23,17 +23,20 @@ def load_from_google():
     if WEB_APP_URL == "SEM_VLOZ_URL_Z_GOOGLE_SCRIPTS":
         return default_df
     try:
-        response = requests.get(WEB_APP_URL)
+        response = requests.get(WEB_APP_URL, timeout=5)
         data = response.json()
-        if data:
-            df = pd.DataFrame(data)
-            required_cols = ["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadováno ks"]
-            if "Umístění" not in df.columns:
-                df["Umístění"] = "Hlavní sklad"
-            if all(col in df.columns for col in ["Materiál", "Ks v balení", "Počet balení", "Požadováno ks"]):
-                return df
+        # Pokud je tabulka v Google Sheets prázdná, vrátí [], v takovém případě dáme výchozí data
+        if not data or len(data) == 0:
+            return default_df
+            
+        df = pd.DataFrame(data)
+        required_cols = ["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadováno ks"]
+        if "Umístění" not in df.columns:
+            df["Umístění"] = "Hlavní sklad"
+        if all(col in df.columns for col in required_cols):
+            return df
         return default_df
-    except:
+    except Exception:
         return default_df
 
 # Inicializace dat v session_state
@@ -89,7 +92,7 @@ if st.button("☁️ Uložit a odeslat do Google Tabulky", type="primary"):
         with st.spinner("Ukládám do cloudu..."):
             records = st.session_state.material_data.to_dict(orient="records")
             try:
-                response = requests.post(WEB_APP_URL, json=records)
+                response = requests.post(WEB_APP_URL, json=records, timeout=5)
                 if response.status_code == 200:
                     st.success("Data byla úspěšně uložena do Google Tabulky!")
                 else:
