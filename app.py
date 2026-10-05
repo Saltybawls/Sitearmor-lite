@@ -28,7 +28,6 @@ def load_from_google():
         if data:
             df = pd.DataFrame(data)
             required_cols = ["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadováno ks"]
-            # Pokud stará tabulka nemá sloupec Umístění, doplníme ho
             if "Umístění" not in df.columns:
                 df["Umístění"] = "Hlavní sklad"
             if all(col in df.columns for col in ["Materiál", "Ks v balení", "Počet balení", "Požadováno ks"]):
@@ -52,14 +51,13 @@ if not st.session_state.material_data.empty:
         material_list = st.session_state.material_data["Materiál"].tolist()
         selected_material = col_f1.selectbox("Vyber materiál", material_list)
         added_packs = col_f2.number_input("Přidat balení", min_value=1, value=1, step=1)
-        submit_add = col_f3.form_submit_data = col_f3.form_submit_button("➕ Přičíst k zásobě")
+        submit_add = col_f3.form_submit_button("➕ Přičíst k zásobě")
         
         if submit_add:
-            # Najdeme řádek a přičteme balení
             idx = st.session_state.material_data[st.session_state.material_data["Materiál"] == selected_material].index[0]
             current_packs = int(st.session_state.material_data.loc[idx, "Počet balení"])
             st.session_state.material_data.loc[idx, "Počet balení"] = current_packs + int(added_packs)
-            st.success( यशस्वी("Úspěšně přičteno! Nezapomeň dole uložit do cloudu."))
+            st.success("Úspěšně přičteno! Nezapomeň dole uložit do cloudu.")
             st.rerun()
 
 st.divider()
@@ -67,14 +65,12 @@ st.divider()
 # --- HLAVNÍ INVENTÁŘ A VYHLEDÁVÁNÍ ---
 st.subheader("📋 Kompletní inventář & Úprava dat")
 
-# Vyhledávací pole
 search_query = st.text_input("🔍 Hledat v materiálu (napiš název nebo část...)", "")
 
 df_to_edit = st.session_state.material_data.copy()
 if search_query:
     df_to_edit = df_to_edit[df_to_edit["Materiál"].str.contains(search_query, case=False, na=False)]
 
-# Interaktivní tabulka
 edited_df = st.data_editor(
     df_to_edit, 
     num_rows="dynamic",
@@ -82,13 +78,10 @@ edited_df = st.data_editor(
     key="data_editor"
 )
 
-# Pokud uživatel vyhledával, musíme změny správně promítnout zpět do celkového DataFrame
 if search_query and not edited_df.equals(df_to_edit):
-    # Aktualizujeme hlavní data v session_state podle toho, co uživatel upravil v zafiltorvaném pohledu
     for idx, row in edited_df.iterrows():
         st.session_state.material_data.loc[idx] = row
 
-# Tlačítko pro odeslání dat do Google Tabulky
 if st.button("☁️ Uložit a odeslat do Google Tabulky", type="primary"):
     if WEB_APP_URL == "SEM_VLOZ_URL_Z_GOOGLE_SCRIPTS":
         st.warning("Nejprve v kódu nastav URL adresu Google skriptu!")
@@ -131,7 +124,6 @@ if not st.session_state.material_data.empty:
 
     df_calc["Chybí balení"] = df_calc.apply(calc_missing_packs, axis=1)
 
-    # Přidání vizuálního indikátoru (Status)
     def get_status(row):
         if row["Chybí ks"] == 0:
             return "🟢 Splněno"
