@@ -16,7 +16,7 @@ COLS = ["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadov�
 def load_data():
     empty_df = pd.DataFrame(columns=COLS)
     try:
-        r = requests.get(WEB_APP_URL, timeout=5)
+        r = requests.get(WEB_APP_URL, timeout=20)
         if r.status_code == 200:
             data = r.json()
             if data and len(data) > 0:
@@ -84,7 +84,7 @@ if st.button("☁️ Uložit vše do cloudu", type="primary"):
     with st.spinner("Odesílám do Google Tabulky..."):
         try:
             records = st.session_state.df.to_dict(orient="records")
-            r = requests.post(WEB_APP_URL, json=records, timeout=5)
+            r = requests.post(WEB_APP_URL, json=records, timeout=20)
             if r.status_code == 200:
                 st.success("✅ Úspěšně uloženo do Google Tabulky!")
             else:
