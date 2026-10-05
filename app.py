@@ -51,32 +51,36 @@ if mats:
 
 st.divider()
 
-# 3. HLAVNÍ TABULKA & VYHLEDÁVÁNÍ
+# 3. HLAVNÍ TABULKA & VYHLEDÁVÁNÍ (Nyní zabaleno do Formuláře pro QoL)
 st.subheader("📋 Inventář a Úpravy")
 
-# Vyhledávací políčko
 search_query = st.text_input("🔍 Hledat v materiálu (napiš název nebo část...)", "")
 
-# Vytvoříme si pohled na data podle toho, zda se vyhledává
 df_to_show = st.session_state.df.copy()
 if search_query:
     df_to_show = df_to_show[df_to_show["Materiál"].str.contains(search_query, case=False, na=False)]
 
-# Samotný editor tabulky
-edited_df = st.data_editor(df_to_show, num_rows="dynamic", use_container_width=True)
+# QoL Vylepšení: Formulář, který zabrání refreshování po každé buňce
+with st.form("table_form"):
+    edited_df = st.data_editor(df_to_show, num_rows="dynamic", use_container_width=True)
+    # Tlačítko, které se musí zmáčknout, aby se změny aplikovaly
+    submit_table = st.form_submit_button("✅ Potvrdit změny v tabulce")
 
-# Správné uložení změn zpět do hlavní paměti
-if search_query:
-    st.session_state.df.update(edited_df)
-    # Pokud uživatel během hledání přidal úplně nový řádek:
-    new_rows = edited_df.index.difference(st.session_state.df.index)
-    if not new_rows.empty:
-        st.session_state.df = pd.concat([st.session_state.df, edited_df.loc[new_rows]])
-else:
-    st.session_state.df = edited_df
+# Zpracování změn po kliknutí na tlačítko "Potvrdit změny"
+if submit_table:
+    if search_query:
+        st.session_state.df.update(edited_df)
+        new_rows = edited_df.index.difference(st.session_state.df.index)
+        if not new_rows.empty:
+            st.session_state.df = pd.concat([st.session_state.df, edited_df.loc[new_rows]])
+    else:
+        st.session_state.df = edited_df
+    
+    st.success("Změny zapsány do paměti! Můžeš pokračovat v úpravách, nebo to rovnou poslat do Googlu.")
+    st.rerun() # Jeden rychlý refresh na konci, aby se přepočítaly statistiky
 
 # 4. ULOŽENÍ DO CLOUDU
-if st.button("☁️ Uložit do cloudu", type="primary"):
+if st.button("☁️ Uložit vše do cloudu", type="primary"):
     with st.spinner("Odesílám do Google Tabulky..."):
         try:
             records = st.session_state.df.to_dict(orient="records")
