@@ -3,191 +3,110 @@ import pandas as pd
 from fpdf import FPDF
 import tempfile
 import requests
-import json
 import math
 
 st.set_page_config(page_title="SiteArmor Lite", page_icon="🛡️")
-st.title("🛡️ SiteArmor Lite: Správa materiálu na stavbě")
+st.title("🛡️ SiteArmor Lite")
 
-# URL adresa tvého Google Scriptu:
+# Tvoje Google Script URL
 WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyuQSbXqEFj4bCLxDzEnAFy47yzvyvbOC7MBbuGx2V4d531ML0BI0aUoJw3vsoLus2v/exec"
+COLS = ["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadováno ks"]
 
-# Načtení dat z Google Tabulky s bezpečným ošetřením prázdného stavu
-@st.cache_data(ttl=5)
-def load_from_google():
-    default_df = pd.DataFrame([
-        {"Materiál": "Šrouby M10", "Umístění": "Sklad A", "Ks v balení": 50, "Počet balení": 20, "Požadováno ks": 1500},
-        {"Materiál": "Flanched DN 150", "Umístění": "1. patro", "Ks v balení": 1, "Počet balení": 10, "Požadováno ks": 10}
-    ])
-    
-    if WEB_APP_URL == "SEM_VLOZ_URL_Z_GOOGLE_SCRIPTS":
-        return default_df
+# 1. ČISTÉ NAČTENÍ DAT BEZ BALASTU (žádná cache, která to zasekávala)
+def load_data():
     try:
-        response = requests.get(WEB_APP_URL, timeout=5)
-        data = response.json()
-        # Pokud je tabulka v Google Sheets prázdná, vrátí [], v takovém případě dáme výchozí data
-        if not data or len(data) == 0:
-            return default_df
-            
-        df = pd.DataFrame(data)
-        required_cols = ["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadováno ks"]
-        if "Umístění" not in df.columns:
-            df["Umístění"] = "Hlavní sklad"
-        if all(col in df.columns for col in required_cols):
-            return df
-        return default_df
-    except Exception:
-        return default_df
+        r = requests.get(WEB_APP_URL, timeout=3)
+        df = pd.DataFrame(r.json())
+    except:
+        df = pd.DataFrame(columns=COLS) # Pokud Google neodpoví, vytvoří prázdnou tabulku
+    
+    # Pojistka: Vždy zajistíme správné sloupce, i když je tabulka zrovna prázdná
+    for col in COLS:
+        if col not in df.columns:
+            df[col] = "" if col in ["Materiál", "Umístění"] else 0
+    return df[COLS]
 
-# Inicializace dat v session_state
-if 'material_data' not in st.session_state:
-    st.session_state.material_data = load_from_google()
+# Načteme data jen při startu aplikace
+if "df" not in st.session_state:
+    st.session_state.df = load_data()
 
-# --- RYCHLÝ PŘÍJEM MATERIÁLU (PŘIČÍTÁNÍ) ---
-st.subheader("📦 Rychlý příjem materiálu na stavbu")
-st.markdown("Přivezli novou dodávku? Vyber položku, zadej počet **nově přivezených balení** a rovnou se to přičte k aktuálnímu stavu.")
-
-if not st.session_state.material_data.empty:
-    with st.form("quick_add_form"):
-        col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
+# 2. RYCHLÝ PŘÍJEM (Zobrazí se jen, když v tabulce už nějaký materiál je)
+mats = [m for m in st.session_state.df["Materiál"].unique() if str(m).strip() != ""]
+if mats:
+    st.subheader("📦 Rychlý příjem")
+    with st.form("add_form"):
+        c1, c2, c3 = st.columns([2, 1, 1])
+        sel_mat = c1.selectbox("Vyber materiál", mats)
+        add_qty = c2.number_input("Přidat balení", min_value=1, step=1)
         
-        material_list = st.session_state.material_data["Materiál"].tolist()
-        selected_material = col_f1.selectbox("Vyber materiál", material_list)
-        added_packs = col_f2.number_input("Přidat balení", min_value=1, value=1, step=1)
-        submit_add = col_f3.form_submit_button("➕ Přičíst k zásobě")
-        
-        if submit_add:
-            idx = st.session_state.material_data[st.session_state.material_data["Materiál"] == selected_material].index[0]
-            current_packs = int(st.session_state.material_data.loc[idx, "Počet balení"])
-            st.session_state.material_data.loc[idx, "Počet balení"] = current_packs + int(added_packs)
-            st.success("Úspěšně přičteno! Nezapomeň dole uložit do cloudu.")
+        if c3.form_submit_button("➕ Přičíst"):
+            idx = st.session_state.df[st.session_state.df["Materiál"] == sel_mat].index[0]
+            curr = pd.to_numeric(st.session_state.df.loc[idx, "Počet balení"], errors="coerce") or 0
+            st.session_state.df.loc[idx, "Počet balení"] = curr + add_qty
+            st.success(f"Přidáno {add_qty} balení k {sel_mat}! Nezapomeň uložit do cloudu.")
             st.rerun()
 
 st.divider()
 
-# --- HLAVNÍ INVENTÁŘ A VYHLEDÁVÁNÍ ---
-st.subheader("📋 Kompletní inventář & Úprava dat")
+# 3. HLAVNÍ TABULKA (s možností přidávat řádky úplně dole)
+st.subheader("📋 Inventář")
+edited_df = st.data_editor(st.session_state.df, num_rows="dynamic", use_container_width=True)
+st.session_state.df = edited_df
 
-search_query = st.text_input("🔍 Hledat v materiálu (napiš název nebo část...)", "")
-
-df_to_edit = st.session_state.material_data.copy()
-if search_query:
-    df_to_edit = df_to_edit[df_to_edit["Materiál"].str.contains(search_query, case=False, na=False)]
-
-edited_df = st.data_editor(
-    df_to_edit, 
-    num_rows="dynamic",
-    use_container_width=True,
-    key="data_editor"
-)
-
-if search_query and not edited_df.equals(df_to_edit):
-    for idx, row in edited_df.iterrows():
-        st.session_state.material_data.loc[idx] = row
-
-if st.button("☁️ Uložit a odeslat do Google Tabulky", type="primary"):
-    if WEB_APP_URL == "SEM_VLOZ_URL_Z_GOOGLE_SCRIPTS":
-        st.warning("Nejprve v kódu nastav URL adresu Google skriptu!")
-    else:
-        with st.spinner("Ukládám do cloudu..."):
-            records = st.session_state.material_data.to_dict(orient="records")
-            try:
-                response = requests.post(WEB_APP_URL, json=records, timeout=5)
-                if response.status_code == 200:
-                    st.success("Data byla úspěšně uložena do Google Tabulky!")
-                else:
-                    st.error("Chyba při ukládání na server.")
-            except Exception as e:
-                st.error(f"Chyba připojení: {e}")
+# 4. ULOŽENÍ
+if st.button("☁️ Uložit do cloudu", type="primary"):
+    with st.spinner("Odesílám do Google Tabulky..."):
+        try:
+            records = st.session_state.df.to_dict(orient="records")
+            requests.post(WEB_APP_URL, json=records, timeout=5)
+            st.success("✅ Uloženo! Můžeš to zkontrolovat na Disku.")
+        except Exception:
+            st.error("Chyba při ukládání, zkontroluj připojení.")
 
 st.divider()
 
-# --- ANALYTICKÝ PŘEHLED S INDIKÁTORY ---
-st.subheader("📊 Přehled stavu a chybějícího materiálu")
+# 5. VÝPOČTY (Automatický přehled, nedá se do něj psát, jen ukazuje data)
+st.subheader("📊 Přehled stavu")
+df_calc = st.session_state.df.copy()
 
-if not st.session_state.material_data.empty:
-    df_calc = st.session_state.material_data.copy()
+# Převod sloupců na čísla
+for c in ["Ks v balení", "Počet balení", "Požadováno ks"]:
+    df_calc[c] = pd.to_numeric(df_calc[c], errors="coerce").fillna(0)
+
+# Matematika
+df_calc["Celkem ks"] = df_calc["Ks v balení"] * df_calc["Počet balení"]
+df_calc["Chybí ks"] = (df_calc["Požadováno ks"] - df_calc["Celkem ks"]).clip(lower=0)
+df_calc["Chybí balení"] = df_calc.apply(lambda r: math.ceil(r["Chybí ks"] / r["Ks v balení"]) if r["Ks v balení"] > 0 else 0, axis=1)
+df_calc["Stav"] = df_calc["Chybí ks"].apply(lambda x: "🟢 Splněno" if x == 0 else "🔴 Chybí")
+
+st.dataframe(df_calc[["Materiál", "Umístění", "Celkem ks", "Požadováno ks", "Chybí ks", "Chybí balení", "Stav"]], use_container_width=True)
+
+# 6. PDF EXPORT (Kompaktní)
+if st.button("🖨 Generovat PDF"):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "Inventarni soupis - SiteArmor", ln=True, align="C")
+    pdf.ln(5)
     
-    for col in ["Ks v balení", "Počet balení", "Požadováno ks"]:
-        if col not in df_calc.columns:
-            df_calc[col] = 0
-
-    df_calc["Ks v balení"] = pd.to_numeric(df_calc["Ks v balení"], errors="coerce").fillna(0)
-    df_calc["Počet balení"] = pd.to_numeric(df_calc["Počet balení"], errors="coerce").fillna(0)
-    df_calc["Požadováno ks"] = pd.to_numeric(df_calc["Požadováno ks"], errors="coerce").fillna(0)
+    pdf.set_font("Arial", "B", 9)
+    cols_pdf = [("Material", 50), ("Umisteni", 30), ("Ks/Bal", 20), ("Baleni", 20), ("Celkem", 20), ("Chybi", 20), ("Ch. bal", 20)]
+    for name, w in cols_pdf:
+        pdf.cell(w, 8, name, border=1, align="C")
+    pdf.ln()
     
-    df_calc["Celkem ks"] = df_calc["Ks v balení"] * df_calc["Počet balení"]
-    df_calc["Chybí ks"] = df_calc["Požadováno ks"] - df_calc["Celkem ks"]
-    df_calc["Chybí ks"] = df_calc["Chybí ks"].apply(lambda x: x if x > 0 else 0)
-    
-    def calc_missing_packs(row):
-        if row["Ks v balení"] > 0 and row["Chybí ks"] > 0:
-            return math.ceil(row["Chybí ks"] / row["Ks v balení"])
-        return 0
-
-    df_calc["Chybí balení"] = df_calc.apply(calc_missing_packs, axis=1)
-
-    def get_status(row):
-        if row["Chybí ks"] == 0:
-            return "🟢 Splněno"
-        else:
-            return "🔴 Chybí"
-
-    df_calc["Stav"] = df_calc.apply(get_status, axis=1)
-
-    st.dataframe(
-        df_calc[["Materiál", "Umístění", "Celkem ks", "Požadováno ks", "Chybí ks", "Chybí balení", "Stav"]],
-        use_container_width=True
-    )
-
-st.divider()
-
-# --- EXPORT DO PDF ---
-st.subheader("🖨 Export inventáře do PDF")
-
-if st.button("Generovat PDF soupis"):
-    if st.session_state.material_data.empty:
-        st.warning("Tabulka je prázdná, není co exportovat.")
-    else:
-        pdf = FPDF()
-        pdf.add_page()
-        
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, "SiteArmor - Inventarni soupis", ln=True, align="C")
-        pdf.ln(10)
-        
-        pdf.set_font("Arial", "B", 8)
-        pdf.cell(50, 10, "Material", border=1)
-        pdf.cell(25, 10, "Umisteni", border=1)
-        pdf.cell(20, 10, "Ks/Bal", border=1, align="C")
-        pdf.cell(20, 10, "Baleni", border=1, align="C")
-        pdf.cell(20, 10, "Celkem", border=1, align="C")
-        pdf.cell(20, 10, "Chybi ks", border=1, align="C")
-        pdf.cell(25, 10, "Chybi bal.", border=1, align="C")
+    pdf.set_font("Arial", "", 9)
+    for _, row in df_calc.iterrows():
+        pdf.cell(cols_pdf[0][1], 8, str(row["Materiál"]).encode('latin-1', 'replace').decode('latin-1'), border=1)
+        pdf.cell(cols_pdf[1][1], 8, str(row["Umístění"]).encode('latin-1', 'replace').decode('latin-1'), border=1)
+        pdf.cell(cols_pdf[2][1], 8, str(int(row["Ks v balení"])), border=1, align="C")
+        pdf.cell(cols_pdf[3][1], 8, str(int(row["Počet balení"])), border=1, align="C")
+        pdf.cell(cols_pdf[4][1], 8, str(int(row["Celkem ks"])), border=1, align="C")
+        pdf.cell(cols_pdf[5][1], 8, str(int(row["Chybí ks"])), border=1, align="C")
+        pdf.cell(cols_pdf[6][1], 8, str(int(row["Chybí balení"])), border=1, align="C")
         pdf.ln()
         
-        pdf.set_font("Arial", "", 8)
-        for index, row in df_calc.iterrows():
-            mat_text = str(row["Materiál"]).encode('latin-1', 'replace').decode('latin-1')
-            loc_text = str(row["Umístění"]).encode('latin-1', 'replace').decode('latin-1')
-            
-            pdf.cell(50, 10, mat_text, border=1)
-            pdf.cell(25, 10, loc_text, border=1)
-            pdf.cell(20, 10, str(int(row["Ks v balení"])), border=1, align="C")
-            pdf.cell(20, 10, str(int(row["Počet balení"])), border=1, align="C")
-            pdf.cell(20, 10, str(int(row["Celkem ks"])), border=1, align="C")
-            pdf.cell(20, 10, str(int(row["Chybí ks"])), border=1, align="C")
-            pdf.cell(25, 10, str(int(row["Chybí balení"])), border=1, align="C")
-            pdf.ln()
-            
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        pdf.output(temp_file.name)
-        
-        with open(temp_file.name, "rb") as file:
-            st.download_button(
-                label="📥 Stáhnout vygenerované PDF",
-                data=file,
-                file_name="site_armor_inventar.pdf",
-                mime="application/pdf"
-            )
-        st.success("PDF bylo úspěšně připraveno ke stažení!")
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    pdf.output(tmp.name)
+    with open(tmp.name, "rb") as f:
+        st.download_button("📥 Stáhnout PDF", f, "inventar.pdf", "application/pdf")
