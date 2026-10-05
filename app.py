@@ -9,7 +9,7 @@ st.set_page_config(page_title="SiteArmor Lite", page_icon="🛡️", layout="wid
 st.title("🛡️ SiteArmor Lite")
 
 # Tvoje Google Script URL
-WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyuQSbXqEFj4bCLxDzEnAFy47yzvyvbOC7MBbuGx2V4d531ML0BI0aUoJw3vsoLus2v/exec"
+WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzbhQUzV7HfoWMqhd5JtvVV__LGoMBpds8lAP76zXYmnYhE4NUgoehXPVQhvLqyhzIpaQ/exec"
 COLS = ["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadováno ks"]
 
 # 1. ČISTÉ NAČTENÍ DAT
