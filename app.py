@@ -10,7 +10,7 @@ st.set_page_config(page_title="SiteArmor Lite", page_icon="🛡️")
 st.title("🛡️ SiteArmor Lite: Správa materiálu na stavbě")
 
 # SEM VLOŽ SVOJI URL ADRESU Z GOOGLE SCRIPTS:
-WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyuQSbXqEFj4bCLxDzEnAFy47yzvyvbOC7MBbuGx2V4d531ML0BI0aUoJw3vsoLus2v/exec"
+WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz8_GOd-U9n7f9Q-LIQbRINu4n9ioarj4-V3RI2sEKq7UAwoKyrDnN7Q8MIN8voq1aY/exec"
 
 # Načtení dat z Google Tabulky
 @st.cache_data(ttl=5)
