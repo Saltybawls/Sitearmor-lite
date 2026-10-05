@@ -62,7 +62,7 @@ if search_query:
 
 # QoL Vylepšení: Formulář, který zabrání refreshování po každé buňce
 with st.form("table_form"):
-    edited_df = st.data_editor(df_to_show, num_rows="dynamic", use_container_width=True)
+    edited_df = st.data_editor(df_to_show, num_rows="dynamic", use_container_width=True, hide_index=True)
     # Tlačítko, které se musí zmáčknout, aby se změny aplikovaly
     submit_table = st.form_submit_button("✅ Potvrdit změny v tabulce")
 
