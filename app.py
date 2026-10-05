@@ -2,35 +2,41 @@ import streamlit as st
 import pandas as pd
 from fpdf import FPDF
 import tempfile
-import os
+import requests
+import json
 
 st.set_page_config(page_title="SiteArmor Lite", page_icon="🛡️")
 st.title("🛡️ SiteArmor Lite: Správa materiálu na stavbě")
 
-# Soubor, kam se budou data ukládat
-DATA_FILE = "inventar.csv"
+# SEM VLOŽ URL ADRESU TVÉHO GOOGLE SCRIPTU (v uvozovkách):
+WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyuQSbXqEFj4bCLxDzEnAFy47yzvyvbOC7MBbuGx2V4d531ML0BI0aUoJw3vsoLus2v/exec"
 
-# Načtení dat (pokud soubor existuje, vezme ho, jinak vytvoří výchozí)
-@st.cache_data
-def load_data():
-    if os.path.exists(DATA_FILE):
-        return pd.read_csv(DATA_FILE)
-    else:
-        # Výchozí data, pokud soubor ještě není
-        df = pd.DataFrame([
+# Načtení dat z Google Tabulky
+@st.cache_data(ttl=5)
+def load_from_google():
+    if WEB_APP_URL == "SEM_VLOZ_URL_Z_GOOGLE_SCRIPTS":
+        # Výchozí data, pokud ještě není nastavena URL
+        return pd.DataFrame([
             {"Materiál": "Flanched DN 150", "Počet": 10, "Balení": "Paleta 1"},
-            {"Materiál": "Šrouby M16x60", "Počet": 120, "Balení": "Krabice 3"},
-            {"Materiál": "Těsnění DN 200", "Počet": 5, "Balení": "Sáček A"}
+            {"Materiál": "Šrouby M16x60", "Počet": 120, "Balení": "Krabice 3"}
         ])
-        df.to_csv(DATA_FILE, index=False)
-        return df
+    try:
+        response = requests.get(WEB_APP_URL)
+        data = response.json()
+        if data:
+            return pd.DataFrame(data)
+        else:
+            return pd.DataFrame(columns=["Materiál", "Počet", "Balení"])
+    except:
+        st.error("Nepodařilo se načíst data z Google Tabulky. Zkontroluj připojení.")
+        return pd.DataFrame(columns=["Materiál", "Počet", "Balení"])
 
-# Inicializace dat ve stavu
+# Inicializace dat
 if 'material_data' not in st.session_state:
-    st.session_state.material_data = load_data()
+    st.session_state.material_data = load_from_google()
 
 st.subheader("📋 Aktuální inventář / Seznam materiálu")
-st.markdown("Zde přímo upravuješ počty nebo přidáváš nové položky. Změny se automaticky ukládají.")
+st.markdown("Uprav položky, přidej nové řádky a ulož změny jedním tlačítkem do cloudu.")
 
 # Interaktivní tabulka
 edited_df = st.data_editor(
@@ -40,16 +46,28 @@ edited_df = st.data_editor(
     key="data_editor"
 )
 
-# Tlačítko pro uložení změn do souboru
-if st.button("💾 Uložit změny do paměti", type="primary"):
-    st.session_state.material_data = edited_df
-    edited_df.to_csv(DATA_FILE, index=False)
-    st.success("Změny byly úspěšně uloženy! Data teď nezmizí.")
+# Tlačítko pro odeslání dat do Google Tabulky
+if st.button("☁️ Uložit a odeslat do Google Tabulky", type="primary"):
+    if WEB_APP_URL == "SEM_VLOZ_URL_Z_GOOGLE_SCRIPTS":
+        st.warning("Nejprve v kódu nastav URL adresu Google skriptu!")
+    else:
+        with st.spinner("Ukládám do cloudu..."):
+            # Převod tabulky na JSON
+            records = edited_df.to_dict(orient="records")
+            try:
+                response = requests.post(WEB_APP_URL, json=records)
+                if response.status_code == 200:
+                    st.session_state.material_data = edited_df
+                    st.success("Data byla úspěšně uložena do Google Tabulky!")
+                else:
+                    st.error("Chyba při ukládání na server.")
+            except Exception as e:
+                st.error(f"Chyba připojení: {e}")
 
 st.divider()
 
 # Sekce pro export do PDF
-st.subheader("🖨️ Export inventáře do PDF")
+st.subheader("🖨 Export inventáře do PDF")
 
 if st.button("Generovat PDF soupis"):
     if edited_df.empty:
