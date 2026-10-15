@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import tempfrom  # opraveno z tempfile nebo ponecháno níže jako tempfile
 import tempfile
 from fpdf import FPDF
 
@@ -12,7 +13,7 @@ st.set_page_config(page_title="SiteArmor Lite", page_icon="🛡️", layout="wid
 LANGS = {
     "Čeština": {
         "lang_code": "CZ",
-        "title": "SiteArmor Lite – Správa inventáře",
+        "title": "🛡️ SiteArmor Lite – Správa inventáře",
         "subtitle": "Správa materiálu na stavbě",
         "tab_edit": "Upravit inventář",
         "tab_add": "Přidat materiál",
@@ -38,7 +39,7 @@ LANGS = {
     },
     "Deutsch": {
         "lang_code": "DE",
-        "title": "SiteArmor Lite – Bestandsverwaltung",
+        "title": "🛡️ SiteArmor Lite – Bestandsverwaltung",
         "subtitle": "Baustellenmaterial-Management",
         "tab_edit": "Bestand bearbeiten",
         "tab_add": "Material hinzufügen",
@@ -64,7 +65,7 @@ LANGS = {
     },
     "English": {
         "lang_code": "EN",
-        "title": "SiteArmor Lite – Inventory Management",
+        "title": "🛡️ SiteArmor Lite – Inventory Management",
         "subtitle": "Construction Site Material Management",
         "tab_edit": "Edit Inventory",
         "tab_add": "Add Material",
@@ -90,46 +91,40 @@ LANGS = {
     }
 }
 
-# --- HLAVIČKA, LOGO A PŘEPÍNAČ JAZYKŮ PŘÍMO NA STRÁNCE ---
-col_logo, col_title, col_lang = st.columns([1, 6, 3])
-
-with col_logo:
-    try:
-        st.image("logo.png", width=70)
-    except Exception:
-        st.write("🛡️")
-
-with col_title:
-    st.title("SiteArmor Lite")
-    st.markdown("### Správa materiálu na stavbě")
-
-with col_lang:
-    selected_lang = st.selectbox("🌐 Jazyk / Language / Sprache", list(LANGS.keys()))
-
+# Boční panel pro výběr jazyka
+with st.sidebar:
+    selected_lang = st.selectbox("🌐 Jazyk / Sprache / Language", list(LANGS.keys()))
 t = LANGS[selected_lang]
-st.divider()
+
+st.title(t["title"])
+st.subheader(t["subtitle"])
 
 # --- 1. NASTAVENÍ GOOGLE SHEETS API ---
+# (Zde doplňte svou URL adresu z Google Apps Script, řádek 14)
 WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz.../exec" 
 
-# --- 2. INICIALIZACE A NAČTENÍ DAT Z CLOUDU ---
+# --- 2. INICIALIZACE STAVU DAT ---
 if "df" not in st.session_state:
+    # Výchozí struktura dat, pokud ještě není načteno
+    st.session_state.df = pd.DataFrame(columns=["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadováno ks"])
+
+# Načtení dat z Google Sheets při startu, pokud je prázdno
+@st.cache_data(ttl=60)
+def load_data_from_cloud(url):
     try:
-        response = requests.get(WEB_APP_URL, timeout=5)
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
-            cloud_data = response.json()
-            if cloud_data:
-                st.session_state.df = pd.DataFrame(cloud_data)
-            else:
-                raise ValueError()
-        else:
-            raise ValueError()
+            data = response.json()
+            if data:
+                return pd.DataFrame(data)
     except Exception:
-        st.session_state.df = pd.DataFrame(columns=["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadováno ks"])
+        pass
+    return None
 
 # --- 3. SPRÁVA POLOŽEK (TABULKA A VYHLEDÁVÁNÍ) ---
 search_query = st.text_input("🔍", placeholder=t["search"], label_visibility="collapsed")
 
+# Filtrování dat podle vyhledávání
 df_view = st.session_state.df.copy()
 if search_query:
     mask = df_view.astype(str).apply(lambda x: x.str.contains(search_query, case=False, na=False)).any(axis=1)
@@ -139,6 +134,7 @@ st.markdown("### " + t["tab_edit"])
 edited_df = st.data_editor(df_view, num_rows="dynamic", use_container_width=True, key="inventory_editor")
 
 if st.button(t["confirm_changes"]):
+    # Aktualizace hlavního dataframe podle úprav v editoru
     for idx, row in edited_df.iterrows():
         st.session_state.df.loc[idx] = row
     st.success("Změny uloženy v paměti!")
@@ -222,8 +218,7 @@ if not df_grouped.empty:
     for _, row in df_grouped.iterrows():
         stat_txt = "OK" if row["Shortage_Pcs"] == 0 else ("Fehlt" if t["lang_code"] == "DE" else ("Missing" if t["lang_code"] == "EN" else "Chybi"))
         pdf.cell(cols_pdf[0][1], 8, clean_pdf_text(row["Mat_Name"]), border=1)
-        cols_w1 = cols_pdf[1][1]
-        pdf.cell(cols_w1, 8, clean_pdf_text(row["Location"]), border=1)
+        pdf.cell(cols_pdf[1][1], 8, clean_pdf_text(row["Location"]), border=1)
         pdf.cell(cols_pdf[2][1], 8, str(int(row["Total_Pcs"])), border=1, align="C")
         pdf.cell(cols_pdf[3][1], 8, str(int(row["Required_Pcs"])), border=1, align="C")
         pdf.cell(cols_pdf[4][1], 8, str(int(row["Shortage_Pcs"])), border=1, align="C")
