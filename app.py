@@ -367,7 +367,7 @@ if st.button(t["print_pdf"]):
         with open(tmp.name, "rb") as f:
             st.download_button(t["download_pdf"], f, pdf_filename, "application/pdf")
 
-# 6. PDF EXPORT
+# 6. PDF EXPORT (Jedno jediné tlačítko bez balastu)
 def clean_pdf_text(text):
     replacements = {
         'á':'a', 'č':'c', 'ď':'d', 'é':'e', 'ě':'e', 'í':'i', 'ň':'n', 'ó':'o', 'ř':'r', 'š':'s', 'ť':'t', 'ú':'u', 'ů':'u', 'ý':'y', 'ž':'z',
@@ -402,10 +402,15 @@ if not df_grouped.empty:
         pdf.cell(cols_pdf[5][1], 8, stat_txt, border=1, align="C")
         pdf.ln()
         
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    pdf.output(tmp.name)
+    # Vygenerování PDF přímo do paměti bez mezikroků
+    pdf_output = pdf.output(dest='S').encode('latin1')
     pdf_filename = f"Bestandsliste_{t['lang_code']}.pdf"
-    with open(tmp.name, "rb") as f:
-        st.download_button(t["download_pdf"], f, pdf_filename, "application/pdf")
+    
+    st.download_button(
+        label=t["download_pdf"],
+        data=pdf_output,
+        file_name=pdf_filename,
+        mime="application/pdf"
+    )
 else:
-  st.info(t["no_export"])
+    st.info(t["no_export"])
