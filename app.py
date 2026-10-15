@@ -285,7 +285,7 @@ if st.button(t["save_cloud"], type="primary"):
 
 st.divider()
 
-# 5. VÝPOČTY (Automatické sčítání)
+# 5. VÝPOČTY (Bezpečné sčítání bez chyb v diakritice)
 st.subheader(t["overview"])
 df_raw = st.session_state.df.copy()
 df_raw = df_raw[df_raw["Materiál"].astype(str).str.strip() != ""]
@@ -297,31 +297,75 @@ if not df_raw.empty:
     df_raw["Row_Total"] = df_raw["Ks v balení"] * df_raw["Počet balení"]
     df_raw["Mat_Key"] = df_raw["Materiál"].astype(str).str.strip().str.upper()
 
-    df_grouped = df_raw.groupby("Mat_Key", as_index=False, sort=False).agg({
-        "Materiál": lambda x: str(x.iloc[0]).strip(),
-        "Umístění": lambda x: ", ".join(dict.fromkeys([str(v).strip() for v in x if str(v).strip() != ""])),
-        "Row_Total": "sum",
-        "Požadováno ks": "max",
-        "Ks v balení": "max"
-    })
+    df_grouped = df_raw.groupby("Mat_Key", as_index=False, sort=False).agg(
+        Mat_Name=("Materiál", lambda x: str(x.iloc[0]).strip()),
+        Location=("Umístění", lambda x: ", ".join(dict.fromkeys([str(v).strip() for v in x if str(v).strip() != ""]))),
+        Total_Pcs=("Row_Total", "sum"),
+        Required_Pcs=("Požadováno ks", "max"),
+        Pkg_Size=("Ks v balení", "max")
+    )
+    
+    df_grouped["Shortage_Pcs"] = (df_grouped["Required_Pcs"] - df_grouped["Total_Pcs"]).clip(lower=0)
+    df_grouped["Status"] = df_grouped["Shortage_Pcs"].apply(lambda x: t["status_ok"] if x == 0 else t["status_miss"])
 
-    df_grouped.rename(columns={"Row_Total": "Celkem ks"}, inplace=True)
-    df_grouped["Chybí ks"] = (df_grouped["Požadováno ks"] - df_grouped["Celkem ks"]).clip(lower=0)
-    df_grouped["Stav"] = df_grouped["Chybí ks"].apply(lambda x: t["status_ok"] if x == 0 else t["status_miss"])
-
-    df_display = df_grouped[["Materiál", "Umístění", "Celkem ks", "Požadováno ks", "Chybí ks", "Stav"]].rename(columns={
-        "Materiál": t["col_mat"],
-        "Umístění": t["col_loc"],
-        "Celkem ks": t["col_tot"],
-        "Požadováno ks": t["col_req"],
-        "Chybí ks": t["col_miss_pcs"],
-        "Stav": t["col_stat"]
+    # Vytvoření tabulky přímo s lokalizovanými názvy (žádné přejmenovávání, které by mohlo selhat)
+    df_display = pd.DataFrame({
+        t["col_mat"]: df_grouped["Mat_Name"],
+        t["col_loc"]: df_grouped["Location"],
+        t["col_tot"]: df_grouped["Total_Pcs"],
+        t["col_req"]: df_grouped["Required_Pcs"],
+        t["col_miss_pcs"]: df_grouped["Shortage_Pcs"],
+        t["col_stat"]: df_grouped["Status"]
     })
 
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 else:
     df_grouped = pd.DataFrame()
     st.info(t["empty_table"])
+
+# 6. PDF EXPORT
+def clean_pdf_text(text):
+    replacements = {
+        'á':'a', 'č':'c', 'ď':'d', 'é':'e', 'ě':'e', 'í':'i', 'ň':'n', 'ó':'o', 'ř':'r', 'š':'s', 'ť':'t', 'ú':'u', 'ů':'u', 'ý':'y', 'ž':'z',
+        'Á':'A', 'Č':'C', 'Ď':'D', 'É':'E', 'Ě':'E', 'Í':'I', 'Ň':'N', 'Ó':'O', 'Ř':'R', 'Š':'S', 'Ť':'T', 'Ú':'U', 'Ů':'U', 'Ý':'Y', 'Ž':'Z'
+    }
+    text = str(text)
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text.encode('latin-1', 'replace').decode('latin-1')
+
+if st.button(t["print_pdf"]):
+    if df_grouped.empty:
+        st.warning(t["no_export"])
+    else:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, t["pdf_title"], ln=True, align="C")
+        pdf.ln(5)
+        
+        pdf.set_font("Arial", "B", 9)
+        cols_pdf = t["pdf_cols"]
+        for name, w in cols_pdf:
+            pdf.cell(w, 8, name, border=1, align="C")
+        pdf.ln()
+        
+        pdf.set_font("Arial", "", 9)
+        for _, row in df_grouped.iterrows():
+            stat_txt = "OK" if row["Shortage_Pcs"] == 0 else ("Fehlt" if t["lang_code"] == "DE" else ("Missing" if t["lang_code"] == "EN" else "Chybi"))
+            pdf.cell(cols_pdf[0][1], 8, clean_pdf_text(row["Mat_Name"]), border=1)
+            pdf.cell(cols_pdf[1][1], 8, clean_pdf_text(row["Location"]), border=1)
+            pdf.cell(cols_pdf[2][1], 8, str(int(row["Total_Pcs"])), border=1, align="C")
+            pdf.cell(cols_pdf[3][1], 8, str(int(row["Required_Pcs"])), border=1, align="C")
+            pdf.cell(cols_pdf[4][1], 8, str(int(row["Shortage_Pcs"])), border=1, align="C")
+            pdf.cell(cols_pdf[5][1], 8, stat_txt, border=1, align="C")
+            pdf.ln()
+            
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        pdf.output(tmp.name)
+        pdf_filename = f"Bestandsliste_{t['lang_code']}.pdf"
+        with open(tmp.name, "rb") as f:
+            st.download_button(t["download_pdf"], f, pdf_filename, "application/pdf")
 
 # 6. PDF EXPORT
 def clean_pdf_text(text):
