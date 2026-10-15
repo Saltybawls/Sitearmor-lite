@@ -378,35 +378,34 @@ def clean_pdf_text(text):
         text = text.replace(k, v)
     return text.encode('latin-1', 'replace').decode('latin-1')
 
-if st.button(t["print_pdf"]):
-    if df_grouped.empty:
-        st.warning(t["no_export"])
-    else:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, t["pdf_title"], ln=True, align="C")
-        pdf.ln(5)
-        
-        pdf.set_font("Arial", "B", 9)
-        cols_pdf = t["pdf_cols"]
-        for name, w in cols_pdf:
-            pdf.cell(w, 8, name, border=1, align="C")
+if not df_grouped.empty:
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, t["pdf_title"], ln=True, align="C")
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", "B", 9)
+    cols_pdf = t["pdf_cols"]
+    for name, w in cols_pdf:
+        pdf.cell(w, 8, name, border=1, align="C")
+    pdf.ln()
+    
+    pdf.set_font("Arial", "", 9)
+    for _, row in df_grouped.iterrows():
+        stat_txt = "OK" if row["Shortage_Pcs"] == 0 else ("Fehlt" if t["lang_code"] == "DE" else ("Missing" if t["lang_code"] == "EN" else "Chybi"))
+        pdf.cell(cols_pdf[0][1], 8, clean_pdf_text(row["Mat_Name"]), border=1)
+        pdf.cell(cols_pdf[1][1], 8, clean_pdf_text(row["Location"]), border=1)
+        pdf.cell(cols_pdf[2][1], 8, str(int(row["Total_Pcs"])), border=1, align="C")
+        pdf.cell(cols_pdf[3][1], 8, str(int(row["Required_Pcs"])), border=1, align="C")
+        pdf.cell(cols_pdf[4][1], 8, str(int(row["Shortage_Pcs"])), border=1, align="C")
+        pdf.cell(cols_pdf[5][1], 8, stat_txt, border=1, align="C")
         pdf.ln()
         
-        pdf.set_font("Arial", "", 9)
-        for _, row in df_grouped.iterrows():
-            stat_txt = "OK" if row["Chybí ks"] == 0 else ("Fehlt" if t["lang_code"] == "DE" else ("Missing" if t["lang_code"] == "EN" else "Chybi"))
-            pdf.cell(cols_pdf[0][1], 8, clean_pdf_text(row["Materiál"]), border=1)
-            pdf.cell(cols_pdf[1][1], 8, clean_pdf_text(row["Umístění"]), border=1)
-            pdf.cell(cols_pdf[2][1], 8, str(int(row["Celkem ks"])), border=1, align="C")
-            pdf.cell(cols_pdf[3][1], 8, str(int(row["Požadováno ks"])), border=1, align="C")
-            pdf.cell(cols_pdf[4][1], 8, str(int(row["Chybí ks"])), border=1, align="C")
-            pdf.cell(cols_pdf[5][1], 8, stat_txt, border=1, align="C")
-            pdf.ln()
-            
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        pdf.output(tmp.name)
-        pdf_filename = f"Bestandsliste_{t['lang_code']}.pdf"
-        with open(tmp.name, "rb") as f:
-            st.download_button(t["download_pdf"], f, pdf_filename, "application/pdf")
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    pdf.output(tmp.name)
+    pdf_filename = f"Bestandsliste_{t['lang_code']}.pdf"
+    with open(tmp.name, "rb") as f:
+        st.download_button(t["download_pdf"], f, pdf_filename, "application/pdf")
+else:
+  st.info(t["no_export"])
