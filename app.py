@@ -6,7 +6,14 @@ import requests
 import math
 import os
 
-st.set_page_config(page_title="SiteArmor Lite | Schumann Tanks", page_icon="🛡️", layout="wide")
+# Zákaz jakýchkoliv automatických překladačů třetích stran v prohlížeči
+st.set_page_config(
+    page_title="SiteArmor Lite | Schumann Tanks", 
+    page_icon="🛡️", 
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+st.markdown('<meta name="google" content="notranslate">', unsafe_allow_html=True)
 
 # ==========================================
 # ⚠️ SEM VLOŽ SVOU FUNKČNÍ GOOGLE SCRIPT URL:
@@ -15,48 +22,8 @@ WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzbhQUzV7HfoWMqhd5JtvVV__
 
 COLS = ["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadováno ks"]
 
-# --- KOMPLETNÍ SLOVNÍK (CZ / DE) ---
+# --- TŘÍJAZYKOVÝ SLOVNÍK (CZ / DE / EN) ---
 LANGS = {
-    "Čeština 🇨🇿": {
-        "lang_code": "CZ",
-        "title": "🛡️ SiteArmor Lite",
-        "subtitle": "Systém řízení skladu a montáže",
-        "quick_add": "📦 Rychlý příjem materiálu",
-        "select_mat": "Vyber materiál (a typ balení)",
-        "add_pkg": "Přidat balení (ks)",
-        "add_btn": "➕ Přičíst na sklad",
-        "add_success": "Přidáno {add_qty} balení k {sel_mat}! Nezapomeň dole uložit do cloudu.",
-        "table_header": "📋 Inventář a Úpravy (jednotlivá balení)",
-        "search": "🔍 Hledat v materiálu (napiš název nebo část...)",
-        "confirm_table": "✅ Potvrdit změny v tabulce",
-        "table_saved": "Změny zapsány do paměti! Můžeš pokračovat v úpravách, nebo to rovnou uložit do cloudu.",
-        "save_cloud": "☁️ Uložit vše do cloudu",
-        "sending": "Odesílám data do cloudu...",
-        "save_success": "✅ Úspěšně uloženo do Google Tabulky!",
-        "save_error": "Chyba při odesílání.",
-        "conn_error": "Chyba připojení: {e}",
-        "overview": "📊 Celkový přehled stavu (sečteno podle materiálu)",
-        "empty_table": "Tabulka je prázdná. Přidej položky výše v Inventáři.",
-        "print_pdf": "🖨 Generovat PDF report",
-        "no_export": "Není co exportovat.",
-        "download_pdf": "📥 Stáhnout hotové PDF",
-        "pdf_title": "Inventarni soupis (Soucet) - Schumann Tanks",
-        "status_ok": "🟢 Splněno",
-        "status_miss": "🔴 Chybí",
-        "pkg_unit": "ks/bal.",
-        # Překlady sloupců v tabulkách
-        "col_mat": "Materiál",
-        "col_loc": "Umístění",
-        "col_pck_size": "Ks v balení",
-        "col_pck_cnt": "Počet balení",
-        "col_req": "Požadováno ks",
-        "col_tot": "Celkem ks",
-        "col_miss_pcs": "Chybí ks",
-        "col_miss_pck": "Chybí balení (odhad)",
-        "col_stat": "Stav",
-        # Sloupce do PDF (bez diakritiky)
-        "pdf_cols": [("Material", 55), ("Umisteni", 35), ("Celkem ks", 25), ("Pozadovano", 25), ("Chybi ks", 25), ("Stav", 25)]
-    },
     "Deutsch 🇩🇪": {
         "lang_code": "DE",
         "title": "🛡️ SiteArmor Lite",
@@ -84,7 +51,6 @@ LANGS = {
         "status_ok": "🟢 Vollständig",
         "status_miss": "🔴 Fehlt",
         "pkg_unit": "Stk./Pack.",
-        # Překlady sloupců v tabulkách
         "col_mat": "Material",
         "col_loc": "Lagerort",
         "col_pck_size": "Stk. / Packung",
@@ -94,38 +60,116 @@ LANGS = {
         "col_miss_pcs": "Fehlmenge (Stk.)",
         "col_miss_pck": "Fehlende Pack.",
         "col_stat": "Status",
-        # Sloupce do PDF
         "pdf_cols": [("Material", 55), ("Lagerort", 35), ("Gesamt Stk", 25), ("Soll Stk", 25), ("Fehlt Stk", 25), ("Status", 25)]
+    },
+    "Čeština 🇨🇿": {
+        "lang_code": "CZ",
+        "title": "🛡️ SiteArmor Lite",
+        "subtitle": "Systém řízení skladu a montáže",
+        "quick_add": "📦 Rychlý příjem materiálu",
+        "select_mat": "Vyber materiál (a typ balení)",
+        "add_pkg": "Přidat balení (ks)",
+        "add_btn": "➕ Přičíst na sklad",
+        "add_success": "Přidáno {add_qty} balení k {sel_mat}! Nezapomeň dole uložit do cloudu.",
+        "table_header": "📋 Inventář a Úpravy (jednotlivá balení)",
+        "search": "🔍 Hledat v materiálu (napiš název nebo část...)",
+        "confirm_table": "✅ Potvrdit změny v tabulce",
+        "table_saved": "Změny zapsány do paměti! Můžeš pokračovat v úpravách, nebo to rovnou uložit do cloudu.",
+        "save_cloud": "☁️ Uložit vše do cloudu",
+        "sending": "Odesílám data do cloudu...",
+        "save_success": "✅ Úspěšně uloženo do Google Tabulky!",
+        "save_error": "Chyba při odesílání.",
+        "conn_error": "Chyba připojení: {e}",
+        "overview": "📊 Celkový přehled stavu (sečteno podle materiálu)",
+        "empty_table": "Tabulka je prázdná. Přidej položky výše v Inventáři.",
+        "print_pdf": "🖨 Generovat PDF report",
+        "no_export": "Není co exportovat.",
+        "download_pdf": "📥 Stáhnout hotové PDF",
+        "pdf_title": "Inventarni soupis (Soucet) - Schumann Tanks",
+        "status_ok": "🟢 Splněno",
+        "status_miss": "🔴 Chybí",
+        "pkg_unit": "ks/bal.",
+        "col_mat": "Materiál",
+        "col_loc": "Umístění",
+        "col_pck_size": "Ks v balení",
+        "col_pck_cnt": "Počet balení",
+        "col_req": "Požadováno ks",
+        "col_tot": "Celkem ks",
+        "col_miss_pcs": "Chybí ks",
+        "col_miss_pck": "Chybí balení (odhad)",
+        "col_stat": "Stav",
+        "pdf_cols": [("Material", 55), ("Umisteni", 35), ("Celkem ks", 25), ("Pozadovano", 25), ("Chybi ks", 25), ("Stav", 25)]
+    },
+    "English 🇬🇧": {
+        "lang_code": "EN",
+        "title": "🛡️ SiteArmor Lite",
+        "subtitle": "Inventory and Assembly Management",
+        "quick_add": "📦 Quick Material Intake",
+        "select_mat": "Select material & package type",
+        "add_pkg": "Add packages (pcs)",
+        "add_btn": "➕ Add to Stock",
+        "add_success": "Added {add_qty} package(s) to {sel_mat}! Remember to save to cloud below.",
+        "table_header": "📋 Inventory & Editing (Individual Packages)",
+        "search": "🔍 Search material (type name or part...)",
+        "confirm_table": "✅ Confirm table changes",
+        "table_saved": "Changes saved to memory! You can continue editing or save to cloud.",
+        "save_cloud": "☁️ Save all to Cloud",
+        "sending": "Sending data to cloud...",
+        "save_success": "✅ Successfully saved to Google Sheet!",
+        "save_error": "Error sending data.",
+        "conn_error": "Connection error: {e}",
+        "overview": "📊 Status Overview (Aggregated by Material)",
+        "empty_table": "Table is empty. Add items above in Inventory.",
+        "print_pdf": "🖨 Generate PDF Report",
+        "no_export": "Nothing to export.",
+        "download_pdf": "📥 Download PDF",
+        "pdf_title": "Inventory Summary (Total) - Schumann Tanks",
+        "status_ok": "🟢 Complete",
+        "status_miss": "🔴 Missing",
+        "pkg_unit": "pcs/pkg",
+        "col_mat": "Material",
+        "col_loc": "Location",
+        "col_pck_size": "Pcs / Package",
+        "col_pck_cnt": "Packages (Actual)",
+        "col_req": "Required (Pcs)",
+        "col_tot": "Total (Pcs)",
+        "col_miss_pcs": "Shortage (Pcs)",
+        "col_miss_pck": "Missing Pkg.",
+        "col_stat": "Status",
+        "pdf_cols": [("Material", 55), ("Location", 35), ("Total Pcs", 25), ("Required Pcs", 25), ("Missing Pcs", 25), ("Status", 25)]
     }
 }
 
-# --- BOČNÍ PANEL S PŘEPÍNAČEM JAZYKŮ ---
-with st.sidebar:
-    st.markdown("### 🌐 Jazyk / Sprache")
-    selected_lang = st.radio("Vyberte jazyk / Sprache wählen:", ["Deutsch 🇩🇪", "Čeština 🇨🇿"], index=0, label_visibility="collapsed")
-    st.divider()
-    st.caption("🏗️ **Schumann Tank & Stahlbau**")
-    st.caption("SiteArmor Inventory System v2.2")
+# --- HLAVIČKA A PŘEPÍNAČ JAZYKŮ PŘÍMO NA STRÁNCE ---
+col_head, col_lang = st.columns([2.5, 1.5])
+
+with col_lang:
+    selected_lang = st.selectbox(
+        "🌐 Language / Sprache / Jazyk",
+        ["Deutsch 🇩🇪", "Čeština 🇨🇿", "English 🇬🇧"],
+        index=0  # Němčina jako výchozí
+    )
 
 t = LANGS[selected_lang]
 
-# --- HLAVIČKA A LOGO SCHUMANN TANKS POD ŠTÍTEM ---
-st.title(t["title"])
+with col_head:
+    st.title(t["title"])
 
+# Zobrazení loga (pokud existuje logo.png, použije se, jinak moderní SVG)
 logo_loaded = False
 for ext in ["logo.png", "logo.svg", "logo.jpg", "logo.webp"]:
     if os.path.exists(ext):
-        st.image(ext, width=240)
+        st.image(ext, width=220)
         logo_loaded = True
         break
 
 if not logo_loaded:
     st.markdown(f"""
     <div style="display: flex; align-items: center; margin-top: -10px; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
-        <svg width="235" height="44" viewBox="0 0 235 44" xmlns="http://www.w3.org/2000/svg" style="border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.18);">
-            <rect width="235" height="44" fill="#003865"/>
-            <rect width="5" height="44" fill="#E67E22"/>
-            <g transform="translate(14, 7)" stroke="#ffffff" stroke-width="1.5" fill="none">
+        <svg width="235" height="42" viewBox="0 0 235 42" xmlns="http://www.w3.org/2000/svg" style="border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.18);">
+            <rect width="235" height="42" fill="#003865"/>
+            <rect width="5" height="42" fill="#E67E22"/>
+            <g transform="translate(14, 6)" stroke="#ffffff" stroke-width="1.5" fill="none">
                 <path d="M2,8 L15,2 L28,8" stroke="#E67E22" stroke-width="2" fill="rgba(230,126,34,0.2)"/>
                 <rect x="2" y="8" width="26" height="20" rx="1" fill="#004d8c"/>
                 <line x1="2" y1="14" x2="28" y2="14" stroke-opacity="0.6"/>
@@ -133,10 +177,10 @@ if not logo_loaded:
                 <line x1="10" y1="8" x2="10" y2="28" stroke-opacity="0.4"/>
                 <line x1="20" y1="8" x2="20" y2="28" stroke-opacity="0.4"/>
             </g>
-            <text x="52" y="21" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" fill="#ffffff" letter-spacing="1.5">SCHUMANN</text>
-            <text x="52" y="35" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="bold" fill="#E67E22" letter-spacing="3.5">TANKS</text>
+            <text x="52" y="20" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="900" fill="#ffffff" letter-spacing="1.5">SCHUMANN</text>
+            <text x="52" y="33" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="bold" fill="#E67E22" letter-spacing="3.5">TANKS</text>
         </svg>
-        <span style="color: #666; font-size: 15px; font-weight: 500;">| &nbsp;{t["subtitle"]}</span>
+        <span style="color: #666; font-size: 14px; font-weight: 500;">| &nbsp;{t["subtitle"]}</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -160,7 +204,7 @@ def load_data():
 if "df" not in st.session_state:
     st.session_state.df = load_data()
 
-# 2. RYCHLÝ PŘÍJEM (rozlišuje i různá balení stejného materiálu)
+# 2. RYCHLÝ PŘÍJEM
 valid_rows = st.session_state.df[st.session_state.df["Materiál"].astype(str).str.strip() != ""]
 if not valid_rows.empty:
     st.subheader(t["quick_add"])
@@ -241,7 +285,7 @@ if st.button(t["save_cloud"], type="primary"):
 
 st.divider()
 
-# 5. VÝPOČTY (Automatické sčítání stejného materiálu napříč různými baleními)
+# 5. VÝPOČTY (Automatické sčítání)
 st.subheader(t["overview"])
 df_raw = st.session_state.df.copy()
 df_raw = df_raw[df_raw["Materiál"].astype(str).str.strip() != ""]
@@ -250,35 +294,27 @@ if not df_raw.empty:
     for c in ["Ks v balení", "Počet balení", "Požadováno ks"]:
         df_raw[c] = pd.to_numeric(df_raw[c], errors="coerce").fillna(0)
 
-    # Výpočet kusů pro každý jednotlivý řádek (krabici)
     df_raw["Row_Total"] = df_raw["Ks v balení"] * df_raw["Počet balení"]
-    
-    # Klíč pro sjednocení názvů (ignoruje mezery na konci a rozdíly malá/velká písmena)
     df_raw["Mat_Key"] = df_raw["Materiál"].astype(str).str.strip().str.upper()
 
-    # Seskupení a sečtení podle materiálu
     df_grouped = df_raw.groupby("Mat_Key", as_index=False, sort=False).agg({
         "Materiál": lambda x: str(x.iloc[0]).strip(),
         "Umístění": lambda x: ", ".join(dict.fromkeys([str(v).strip() for v in x if str(v).strip() != ""])),
         "Row_Total": "sum",
-        "Požadováno ks": "max",  # Vezme nejvyšší zadaný požadavek u daného materiálu
-        "Ks v balení": "max"     # Pro orientační výpočet chybějících balení
+        "Požadováno ks": "max",
+        "Ks v balení": "max"
     })
 
     df_grouped.rename(columns={"Row_Total": "Celkem ks"}, inplace=True)
     df_grouped["Chybí ks"] = (df_grouped["Požadováno ks"] - df_grouped["Celkem ks"]).clip(lower=0)
-    df_grouped["Chybí balení"] = df_grouped.apply(
-        lambda r: math.ceil(r["Chybí ks"] / r["Ks v balení"]) if r["Ks v balení"] > 0 else 0, axis=1
-    )
     df_grouped["Stav"] = df_grouped["Chybí ks"].apply(lambda x: t["status_ok"] if x == 0 else t["status_miss"])
 
-    df_display = df_grouped[["Materiál", "Umístění", "Celkem ks", "Požadováno ks", "Chybí ks", "Chybí balení", "Stav"]].rename(columns={
+    df_display = df_grouped[["Materiál", "Umístění", "Celkem ks", "Požadováno ks", "Chybí ks", "Stav"]].rename(columns={
         "Materiál": t["col_mat"],
         "Umístění": t["col_loc"],
         "Celkem ks": t["col_tot"],
         "Požadováno ks": t["col_req"],
         "Chybí ks": t["col_miss_pcs"],
-        "Chybí balení": t["col_miss_pck"],
         "Stav": t["col_stat"]
     })
 
@@ -287,7 +323,7 @@ else:
     df_grouped = pd.DataFrame()
     st.info(t["empty_table"])
 
-# 6. PDF EXPORT (Tiskne sečtený přehled)
+# 6. PDF EXPORT
 def clean_pdf_text(text):
     replacements = {
         'á':'a', 'č':'c', 'ď':'d', 'é':'e', 'ě':'e', 'í':'i', 'ň':'n', 'ó':'o', 'ř':'r', 'š':'s', 'ť':'t', 'ú':'u', 'ů':'u', 'ý':'y', 'ž':'z',
@@ -316,17 +352,17 @@ if st.button(t["print_pdf"]):
         
         pdf.set_font("Arial", "", 9)
         for _, row in df_grouped.iterrows():
-            stat_txt = "OK" if row["Chybí ks"] == 0 else ("Fehlt" if t["lang_code"] == "DE" else "Chybi")
+            stat_txt = "OK" if row["Chybí ks"] == 0 else ("Fehlt" if t["lang_code"] == "DE" else ("Missing" if t["lang_code"] == "EN" else "Chybi"))
             pdf.cell(cols_pdf[0][1], 8, clean_pdf_text(row["Materiál"]), border=1)
             pdf.cell(cols_pdf[1][1], 8, clean_pdf_text(row["Umístění"]), border=1)
             pdf.cell(cols_pdf[2][1], 8, str(int(row["Celkem ks"])), border=1, align="C")
             pdf.cell(cols_pdf[3][1], 8, str(int(row["Požadováno ks"])), border=1, align="C")
-            pdf.cell(cols_pdf[4][1], 8, str(int(row["Chybí ks"])), border=1, align="C")
+            pdf.cell(cols_pdf[4][1], 8, str(int(row="Chybí ks"])), border=1, align="C")
             pdf.cell(cols_pdf[5][1], 8, stat_txt, border=1, align="C")
             pdf.ln()
             
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         pdf.output(tmp.name)
-        pdf_filename = "Bestandsliste_Schumann.pdf" if t["lang_code"] == "DE" else "Inventar_Schumann.pdf"
+        pdf_filename = f"Bestandsliste_{t['lang_code']}.pdf"
         with open(tmp.name, "rb") as f:
             st.download_button(t["download_pdf"], f, pdf_filename, "application/pdf")
