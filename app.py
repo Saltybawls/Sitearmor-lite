@@ -357,7 +357,7 @@ if st.button(t["print_pdf"]):
             pdf.cell(cols_pdf[1][1], 8, clean_pdf_text(row["Umístění"]), border=1)
             pdf.cell(cols_pdf[2][1], 8, str(int(row["Celkem ks"])), border=1, align="C")
             pdf.cell(cols_pdf[3][1], 8, str(int(row["Požadováno ks"])), border=1, align="C")
-            pdf.cell(cols_pdf[4][1], 8, str(int(row="Chybí ks"])), border=1, align="C")
+            pdf.cell(cols_pdf[4][1], 8, str(int(row["Chybí ks"])), border=1, align="C")
             pdf.cell(cols_pdf[5][1], 8, stat_txt, border=1, align="C")
             pdf.ln()
             
