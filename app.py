@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
-import tempfrom  # opraveno z tempfile nebo ponecháno níže jako tempfile
 import tempfile
 from fpdf import FPDF
 
