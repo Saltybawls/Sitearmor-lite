@@ -11,7 +11,7 @@ st.set_page_config(page_title="SiteArmor Lite | Schumann Tanks", page_icon="🛡
 # ==========================================
 # ⚠️ SEM VLOŽ SVOU FUNKČNÍ GOOGLE SCRIPT URL:
 # ==========================================
-WEB_APP_URL = WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzbhQUzV7HfoWMqhd5JtvVV__LGoMBpds8lAP76zXYmnYhE4NUgoehXPVQhvLqyhzIpaQ/exec"
+WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzbhQUzV7HfoWMqhd5JtvVV__LGoMBpds8lAP76zXYmnYhE4NUgoehXPVQhvLqyhzIpaQ/exec"
 
 COLS = ["Materiál", "Umístění", "Ks v balení", "Počet balení", "Požadováno ks"]
 
@@ -25,16 +25,16 @@ LANGS = {
         "select_mat": "Vyber materiál (a typ balení)",
         "add_pkg": "Přidat balení (ks)",
         "add_btn": "➕ Přičíst na sklad",
-        "add_success": "Přidáno {add_qty} balení k {sel_mat}! Nezapomeň dole uložit do cloudu.",
+        "add_success": "Přidáno {add_qty} balení k {sel_mat} a automaticky uloženo do cloudu!",
         "table_header": "📋 Inventář a Úpravy (jednotlivá balení)",
         "search": "🔍 Hledat v materiálu (napiš název nebo část...)",
-        "confirm_table": "✅ Potvrdit změny v tabulce",
-        "table_saved": "Změny zapsány do paměti! Můžeš pokračovat v úpravách, nebo to rovnou uložit do cloudu.",
-        "save_cloud": "☁️ Uložit vše do cloudu",
-        "sending": "Odesílám data do cloudu...",
-        "save_success": "✅ Úspěšně uloženo do Google Tabulky!",
-        "save_error": "Chyba při odesílání.",
-        "conn_error": "Chyba připojení: {e}",
+        "confirm_table": "✅ Potvrdit a uložit změny v tabulce",
+        "table_saved": "Změny zapsány a automaticky zálohovány do Google Tabulky!",
+        "save_cloud": "☁️ Vynutit ruční zálohu do cloudu",
+        "sending": "Automaticky zálohuji data do Google Tabulky...",
+        "save_success": "✅ Úspěšně zálohováno do Google Tabulky!",
+        "save_error": "⚠️ Změny jsou v paměti, ale automatická záloha do cloudu selhala (kód {code}).",
+        "conn_error": "⚠️ Chyba připojení při zálohování: {e}",
         "overview": "📊 Celkový přehled stavu (sečteno podle materiálu)",
         "empty_table": "Tabulka je prázdná. Přidej položky výše v Inventáři.",
         "print_pdf": "🖨 Generovat PDF report",
@@ -65,16 +65,16 @@ LANGS = {
         "select_mat": "Material & Packungsgröße auswählen",
         "add_pkg": "Packungen hinzufügen (Stk.)",
         "add_btn": "➕ Bestand erhöhen",
-        "add_success": "{add_qty} Packung(en) zu {sel_mat} hinzugefügt! Bitte unten in der Cloud speichern.",
+        "add_success": "{add_qty} Packung(en) zu {sel_mat} hinzugefügt & automatisch in der Cloud gespeichert!",
         "table_header": "📋 Bestandsaufnahme & Bearbeitung (Einzelpackungen)",
         "search": "🔍 Material suchen (Name oder Teilbegriff eingeben...)",
-        "confirm_table": "✅ Tabellenänderungen übernehmen",
-        "table_saved": "Änderungen vorgemerkt! Du kannst weiterbearbeiten oder direkt in der Cloud speichern.",
-        "save_cloud": "☁️ Alles in der Cloud speichern",
-        "sending": "Daten werden in die Cloud übertragen...",
+        "confirm_table": "✅ Tabellenänderungen übernehmen & speichern",
+        "table_saved": "Änderungen übernommen und automatisch in Google Sheets gesichert!",
+        "save_cloud": "☁️ Manuelles Cloud-Backup erzwingen",
+        "sending": "Automatisches Backup in die Cloud läuft...",
         "save_success": "✅ Erfolgreich in der Datenbank gespeichert!",
-        "save_error": "Fehler beim Senden.",
-        "conn_error": "Verbindungsfehler: {e}",
+        "save_error": "⚠️ Fehler beim automatischen Cloud-Backup (Code {code}).",
+        "conn_error": "⚠️ Verbindungsfehler beim Backup: {e}",
         "overview": "📊 Gesamtübersicht & Fehlteile (summiert nach Material)",
         "empty_table": "Die Tabelle ist leer. Bitte oben im Inventar Positionen hinzufügen.",
         "print_pdf": "🖨 PDF-Bericht erstellen",
@@ -105,9 +105,26 @@ with st.sidebar:
     selected_lang = st.radio("Vyberte jazyk / Sprache wählen:", ["Deutsch 🇩🇪", "Čeština 🇨🇿"], index=0, label_visibility="collapsed")
     st.divider()
     st.caption("🏗️ **Schumann Tank & Stahlbau**")
-    st.caption("SiteArmor Inventory System v2.2")
+    st.caption("SiteArmor Inventory System v2.3 (Auto-Backup)")
 
 t = LANGS[selected_lang]
+
+# --- POMOCNÁ FUNKCE PRO AUTOMATICKÉ ZÁLOHOVÁNÍ ---
+def sync_to_cloud():
+    with st.spinner(t["sending"]):
+        try:
+            clean_df = st.session_state.df.fillna("")
+            records = clean_df.to_dict(orient="records")
+            r = requests.post(WEB_APP_URL, json=records, timeout=20)
+            if r.status_code == 200:
+                st.toast(t["save_success"], icon="☁️")
+                return True
+            else:
+                st.error(t["save_error"].format(code=r.status_code))
+                return False
+        except Exception as e:
+            st.error(t["conn_error"].format(e=e))
+            return False
 
 # --- HLAVIČKA A LOGO SCHUMANN TANKS POD ŠTÍTEM ---
 st.title(t["title"])
@@ -160,6 +177,9 @@ def load_data():
 if "df" not in st.session_state:
     st.session_state.df = load_data()
 
+if st.session_state.get("auto_saved_msg"):
+    st.success(st.session_state.pop("auto_saved_msg"))
+
 # 2. RYCHLÝ PŘÍJEM (rozlišuje i různá balení stejného materiálu)
 valid_rows = st.session_state.df[st.session_state.df["Materiál"].astype(str).str.strip() != ""]
 if not valid_rows.empty:
@@ -184,7 +204,10 @@ if not valid_rows.empty:
             target_idx = options_map[sel_label]
             curr = pd.to_numeric(st.session_state.df.loc[target_idx, "Počet balení"], errors="coerce") or 0
             st.session_state.df.loc[target_idx, "Počet balení"] = curr + add_qty
-            st.success(t["add_success"].format(add_qty=add_qty, sel_mat=sel_label))
+            
+            # AUTOMATICKÁ ZÁLOHA DO GOOGLE TABULKY
+            if sync_to_cloud():
+                st.session_state["auto_saved_msg"] = t["add_success"].format(add_qty=add_qty, sel_mat=sel_label)
             st.rerun()
 
 st.divider()
@@ -212,7 +235,7 @@ with st.form("table_form"):
             "Požadováno ks": st.column_config.NumberColumn(t["col_req"], min_value=0, step=1),
         }
     )
-    submit_table = st.form_submit_button(t["confirm_table"])
+    submit_table = st.form_submit_button(t["confirm_table"], type="primary")
 
 if submit_table:
     if search_query:
@@ -223,21 +246,15 @@ if submit_table:
     else:
         st.session_state.df = edited_df.reset_index(drop=True)
     
-    st.success(t["table_saved"])
+    # AUTOMATICKÁ ZÁLOHA DO GOOGLE TABULKY HNED PO POTVRZENÍ ZMĚN
+    if sync_to_cloud():
+        st.session_state["auto_saved_msg"] = t["table_saved"]
     st.rerun()
 
-# 4. ULOŽENÍ DO CLOUDU
-if st.button(t["save_cloud"], type="primary"):
-    with st.spinner(t["sending"]):
-        try:
-            records = st.session_state.df.to_dict(orient="records")
-            r = requests.post(WEB_APP_URL, json=records, timeout=20)
-            if r.status_code == 200:
-                st.success(t["save_success"])
-            else:
-                st.error(t["save_error"])
-        except Exception as e:
-            st.error(t["conn_error"].format(e=e))
+# 4. RUČNÍ ULOŽENÍ DO CLOUDU
+if st.button(t["save_cloud"]):
+    if sync_to_cloud():
+        st.success(t["save_success"])
 
 st.divider()
 
