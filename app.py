@@ -21,11 +21,22 @@ LANGS = {
         "lang_code": "CZ",
         "title": "🛡️ SiteArmor Lite",
         "subtitle": "Systém řízení skladu a montáže",
-        "quick_add": "📦 Rychlý příjem materiálu",
-        "select_mat": "Vyber materiál (a typ balení)",
+        "quick_add": "📦 Rychlý příjem / Nová položka (s našeptávačem)",
+        "tab_add_existing": "➕ Přidat k existujícímu balení",
+        "tab_add_new": "✨ Založit novou položku / šarži",
+        "select_mat": "Vyber materiál (začni psát pro vyhledání)",
         "add_pkg": "Přidat balení (ks)",
         "add_btn": "➕ Přičíst na sklad",
         "add_success": "Přidáno {add_qty} balení k {sel_mat} a automaticky uloženo do cloudu!",
+        "new_mat_choice": "1. Vyber existující materiál ze seznamu (našeptávač)",
+        "new_mat_opt": "-- 🆕 Zadat úplně nový název materiálu --",
+        "new_mat_custom": "Napiš nový název materiálu",
+        "new_loc_choice": "2. Vyber umístění ze seznamu (našeptávač)",
+        "new_loc_opt": "-- 🆕 Zadat nové umístění --",
+        "new_loc_custom": "Napiš nové umístění (např. Kontejner A, Regal 2...)",
+        "new_btn": "💾 Založit položku a uložit do cloudu",
+        "new_success": "Položka '{mat}' ({loc}) byla přidána a automaticky zálohována!",
+        "new_err_empty": "⚠️ Musíš zadat název materiálu!",
         "table_header": "📋 Inventář a Úpravy (jednotlivá balení)",
         "search": "🔍 Hledat v materiálu (napiš název nebo část...)",
         "confirm_table": "✅ Potvrdit a uložit změny v tabulce",
@@ -61,11 +72,22 @@ LANGS = {
         "lang_code": "DE",
         "title": "🛡️ SiteArmor Lite",
         "subtitle": "Lager- und Montageverwaltung",
-        "quick_add": "📦 Schneller Wareneingang",
-        "select_mat": "Material & Packungsgröße auswählen",
+        "quick_add": "📦 Schneller Wareneingang / Neue Position",
+        "tab_add_existing": "➕ Zu bestehender Packung hinzufügen",
+        "tab_add_new": "✨ Neue Position / Charge anlegen",
+        "select_mat": "Material auswählen (Tippen zum Suchen)",
         "add_pkg": "Packungen hinzufügen (Stk.)",
         "add_btn": "➕ Bestand erhöhen",
         "add_success": "{add_qty} Packung(en) zu {sel_mat} hinzugefügt & automatisch in der Cloud gespeichert!",
+        "new_mat_choice": "1. Vorhandenes Material wählen (Autovervollständigung)",
+        "new_mat_opt": "-- 🆕 Komplett neues Material eingeben --",
+        "new_mat_custom": "Neuen Materialnamen eingeben",
+        "new_loc_choice": "2. Vorhandenen Lagerort wählen (Autovervollständigung)",
+        "new_loc_opt": "-- 🆕 Neuen Lagerort eingeben --",
+        "new_loc_custom": "Neuen Lagerort eingeben (z.B. Container 1...)",
+        "new_btn": "💾 Position anlegen & in Cloud speichern",
+        "new_success": "Position '{mat}' ({loc}) wurde angelegt und automatisch gesichert!",
+        "new_err_empty": "⚠️ Bitte einen Materialnamen eingeben!",
         "table_header": "📋 Bestandsaufnahme & Bearbeitung (Einzelpackungen)",
         "search": "🔍 Material suchen (Name oder Teilbegriff eingeben...)",
         "confirm_table": "✅ Tabellenänderungen übernehmen & speichern",
@@ -105,7 +127,7 @@ with st.sidebar:
     selected_lang = st.radio("Vyberte jazyk / Sprache wählen:", ["Deutsch 🇩🇪", "Čeština 🇨🇿"], index=0, label_visibility="collapsed")
     st.divider()
     st.caption("🏗️ **Schumann Tank & Stahlbau**")
-    st.caption("SiteArmor Inventory System v2.3 (Auto-Backup)")
+    st.caption("SiteArmor Inventory System v2.4 (Auto-Fit & Suggest)")
 
 t = LANGS[selected_lang]
 
@@ -125,6 +147,20 @@ def sync_to_cloud():
         except Exception as e:
             st.error(t["conn_error"].format(e=e))
             return False
+
+# --- DYNAMICKÁ ŠÍŘKA SLOUPCŮ PODLE DÉLKY TEXTU ---
+def get_col_width(df, col_name, default="medium"):
+    if df.empty or col_name not in df.columns:
+        return default
+    max_len = df[col_name].astype(str).map(len).max()
+    if pd.isna(max_len):
+        return default
+    if max_len > 28:
+        return "large"
+    elif max_len > 12:
+        return "medium"
+    else:
+        return "small"
 
 # --- HLAVIČKA A LOGO SCHUMANN TANKS POD ŠTÍTEM ---
 st.title(t["title"])
@@ -180,39 +216,94 @@ if "df" not in st.session_state:
 if st.session_state.get("auto_saved_msg"):
     st.success(st.session_state.pop("auto_saved_msg"))
 
-# 2. RYCHLÝ PŘÍJEM (rozlišuje i různá balení stejného materiálu)
+# Seznam unikátních názvů materiálů a umístění pro našeptávač (jako v Excelu)
 valid_rows = st.session_state.df[st.session_state.df["Materiál"].astype(str).str.strip() != ""]
-if not valid_rows.empty:
-    st.subheader(t["quick_add"])
-    with st.form("add_form"):
-        c1, c2, c3 = st.columns([2, 1, 1])
-        
-        options_map = {}
-        for idx, row in valid_rows.iterrows():
-            mat_name = str(row["Materiál"]).strip()
-            pkg_sz = pd.to_numeric(row["Ks v balení"], errors="coerce") or 0
-            loc_name = str(row["Umístění"]).strip()
-            label = f"{mat_name} ({int(pkg_sz)} {t['pkg_unit']}" + (f" – {loc_name})" if loc_name else ")")
-            if label in options_map:
-                label = f"{label} [#{idx+1}]"
-            options_map[label] = idx
+known_materials = sorted(list(set(valid_rows["Materiál"].astype(str).str.strip()))) if not valid_rows.empty else []
+known_locations = sorted(list(set(valid_rows["Umístění"].astype(str).str.strip()))) if not valid_rows.empty else []
+known_locations = [loc for loc in known_locations if loc != ""]
+
+# 2. RYCHLÝ PŘÍJEM & ZALOŽENÍ POLOŽKY S NAŠEPTÁVAČEM
+st.subheader(t["quick_add"])
+tab1, tab2 = st.tabs([t["tab_add_existing"], t["tab_add_new"]])
+
+with tab1:
+    if not valid_rows.empty:
+        with st.form("add_form"):
+            c1, c2, c3 = st.columns([2, 1, 1])
             
-        sel_label = c1.selectbox(t["select_mat"], list(options_map.keys()))
-        add_qty = c2.number_input(t["add_pkg"], min_value=1, step=1)
-        
-        if c3.form_submit_button(t["add_btn"]):
-            target_idx = options_map[sel_label]
-            curr = pd.to_numeric(st.session_state.df.loc[target_idx, "Počet balení"], errors="coerce") or 0
-            st.session_state.df.loc[target_idx, "Počet balení"] = curr + add_qty
+            options_map = {}
+            for idx, row in valid_rows.iterrows():
+                mat_name = str(row["Materiál"]).strip()
+                pkg_sz = pd.to_numeric(row["Ks v balení"], errors="coerce") or 0
+                loc_name = str(row["Umístění"]).strip()
+                label = f"{mat_name} ({int(pkg_sz)} {t['pkg_unit']}" + (f" – {loc_name})" if loc_name else ")")
+                if label in options_map:
+                    label = f"{label} [#{idx+1}]"
+                options_map[label] = idx
+                
+            sel_label = c1.selectbox(t["select_mat"], list(options_map.keys()))
+            add_qty = c2.number_input(t["add_pkg"], min_value=1, step=1)
             
-            # AUTOMATICKÁ ZÁLOHA DO GOOGLE TABULKY
+            if c3.form_submit_button(t["add_btn"], type="primary"):
+                target_idx = options_map[sel_label]
+                curr = pd.to_numeric(st.session_state.df.loc[target_idx, "Počet balení"], errors="coerce") or 0
+                st.session_state.df.loc[target_idx, "Počet balení"] = curr + add_qty
+                
+                if sync_to_cloud():
+                    st.session_state["auto_saved_msg"] = t["add_success"].format(add_qty=add_qty, sel_mat=sel_label)
+                st.rerun()
+    else:
+        st.info(t["empty_table"])
+
+with tab2:
+    # Chytrý formulář s našeptávačem (pamatuje si předchozí názvy a umístění)
+    c_mat1, c_mat2 = st.columns(2)
+    mat_choice = c_mat1.selectbox(t["new_mat_choice"], [t["new_mat_opt"]] + known_materials)
+    if mat_choice == t["new_mat_opt"]:
+        final_mat = c_mat2.text_input(t["new_mat_custom"], placeholder="např. Šroub M12x40 DIN 933")
+    else:
+        final_mat = mat_choice
+        c_mat2.text_input(t["new_mat_custom"], value=final_mat, disabled=True)
+
+    c_loc1, c_loc2 = st.columns(2)
+    loc_choice = c_loc1.selectbox(t["new_loc_choice"], [t["new_loc_opt"]] + known_locations)
+    if loc_choice == t["new_loc_opt"]:
+        final_loc = c_loc2.text_input(t["new_loc_custom"], placeholder="např. Kontejner 1 - Regál B")
+    else:
+        final_loc = loc_choice
+        c_loc2.text_input(t["new_loc_custom"], value=final_loc, disabled=True)
+
+    # Automatické předvyplnění 'Požadováno ks', pokud už materiál v tabulce existuje
+    default_req = 0
+    if final_mat in known_materials:
+        existing_req = pd.to_numeric(valid_rows[valid_rows["Materiál"].astype(str).str.strip() == final_mat]["Požadováno ks"], errors="coerce").max()
+        if not pd.isna(existing_req):
+            default_req = int(existing_req)
+
+    c_num1, c_num2, c_num3 = st.columns(3)
+    new_pkg_sz = c_num1.number_input(t["col_pck_size"], min_value=1, value=100, step=1)
+    new_pkg_cnt = c_num2.number_input(t["col_pck_cnt"], min_value=0, value=1, step=1)
+    new_req = c_num3.number_input(t["col_req"], min_value=0, value=default_req, step=1)
+
+    if st.button(t["new_btn"], type="primary"):
+        if not str(final_mat).strip():
+            st.error(t["new_err_empty"])
+        else:
+            new_row = pd.DataFrame([{
+                "Materiál": str(final_mat).strip(),
+                "Umístění": str(final_loc).strip(),
+                "Ks v balení": new_pkg_sz,
+                "Počet balení": new_pkg_cnt,
+                "Požadováno ks": new_req
+            }])
+            st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
             if sync_to_cloud():
-                st.session_state["auto_saved_msg"] = t["add_success"].format(add_qty=add_qty, sel_mat=sel_label)
+                st.session_state["auto_saved_msg"] = t["new_success"].format(mat=final_mat, loc=final_loc)
             st.rerun()
 
 st.divider()
 
-# 3. HLAVNÍ TABULKA & VYHLEDÁVÁNÍ
+# 3. HLAVNÍ TABULKA & VYHLEDÁVÁNÍ (S automatickým přizpůsobením šířky)
 st.subheader(t["table_header"])
 
 search_query = st.text_input(t["search"], "")
@@ -221,18 +312,22 @@ df_to_show = st.session_state.df.copy()
 if search_query:
     df_to_show = df_to_show[df_to_show["Materiál"].astype(str).str.contains(search_query, case=False, na=False)]
 
+# Výpočet optimální šířky buněk podle nejdelšího textu ve sloupci
+mat_w = get_col_width(df_to_show, "Materiál", "large")
+loc_w = get_col_width(df_to_show, "Umístění", "medium")
+
 with st.form("table_form"):
     edited_df = st.data_editor(
         df_to_show,
         num_rows="dynamic",
-        use_container_width=True,
+        use_container_width=False, # Vypnutí nuceného smrštění umožní roztáhnutí buněk podle obsahu!
         hide_index=True,
         column_config={
-            "Materiál": st.column_config.TextColumn(t["col_mat"], required=True),
-            "Umístění": st.column_config.TextColumn(t["col_loc"]),
-            "Ks v balení": st.column_config.NumberColumn(t["col_pck_size"], min_value=0, step=1),
-            "Počet balení": st.column_config.NumberColumn(t["col_pck_cnt"], min_value=0, step=1),
-            "Požadováno ks": st.column_config.NumberColumn(t["col_req"], min_value=0, step=1),
+            "Materiál": st.column_config.TextColumn(t["col_mat"], required=True, width=mat_w),
+            "Umístění": st.column_config.TextColumn(t["col_loc"], width=loc_w),
+            "Ks v balení": st.column_config.NumberColumn(t["col_pck_size"], min_value=0, step=1, width="small"),
+            "Počet balení": st.column_config.NumberColumn(t["col_pck_cnt"], min_value=0, step=1, width="small"),
+            "Požadováno ks": st.column_config.NumberColumn(t["col_req"], min_value=0, step=1, width="small"),
         }
     )
     submit_table = st.form_submit_button(t["confirm_table"], type="primary")
@@ -246,12 +341,11 @@ if submit_table:
     else:
         st.session_state.df = edited_df.reset_index(drop=True)
     
-    # AUTOMATICKÁ ZÁLOHA DO GOOGLE TABULKY HNED PO POTVRZENÍ ZMĚN
     if sync_to_cloud():
         st.session_state["auto_saved_msg"] = t["table_saved"]
     st.rerun()
 
-# 4. RUČNÍ ULOŽENÍ DO CLOUDU
+# 4. RUČNÍ ULOŽENÍ DO CLOUDU (Pojistka)
 if st.button(t["save_cloud"]):
     if sync_to_cloud():
         st.success(t["save_success"])
@@ -267,19 +361,15 @@ if not df_raw.empty:
     for c in ["Ks v balení", "Počet balení", "Požadováno ks"]:
         df_raw[c] = pd.to_numeric(df_raw[c], errors="coerce").fillna(0)
 
-    # Výpočet kusů pro každý jednotlivý řádek (krabici)
     df_raw["Row_Total"] = df_raw["Ks v balení"] * df_raw["Počet balení"]
-    
-    # Klíč pro sjednocení názvů (ignoruje mezery na konci a rozdíly malá/velká písmena)
     df_raw["Mat_Key"] = df_raw["Materiál"].astype(str).str.strip().str.upper()
 
-    # Seskupení a sečtení podle materiálu
     df_grouped = df_raw.groupby("Mat_Key", as_index=False, sort=False).agg({
         "Materiál": lambda x: str(x.iloc[0]).strip(),
         "Umístění": lambda x: ", ".join(dict.fromkeys([str(v).strip() for v in x if str(v).strip() != ""])),
         "Row_Total": "sum",
-        "Požadováno ks": "max",  # Vezme nejvyšší zadaný požadavek u daného materiálu
-        "Ks v balení": "max"     # Pro orientační výpočet chybějících balení
+        "Požadováno ks": "max",
+        "Ks v balení": "max"
     })
 
     df_grouped.rename(columns={"Row_Total": "Celkem ks"}, inplace=True)
@@ -299,7 +389,7 @@ if not df_raw.empty:
         "Stav": t["col_stat"]
     })
 
-    st.dataframe(df_display, use_container_width=True, hide_index=True)
+    st.dataframe(df_display, use_container_width=False, hide_index=True)
 else:
     df_grouped = pd.DataFrame()
     st.info(t["empty_table"])
